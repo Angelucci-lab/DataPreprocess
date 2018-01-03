@@ -1,10 +1,17 @@
-# import modules for NWB
+# modules for NWB
 from pynwb import NWBFile, get_manager
 from datetime import datetime
 from pynwb.form.backends.hdf5 import HDF5IO
 from pynwb.ecephys import ElectricalSeries, TimeSeries
 from pynwb.ecephys import ElectrodeTable, ElectrodeTableRegion
-# import modules for reading Blackrock *.ns files
+#  modules for reading Blackrock *.ns files
+import sys
+sys.path.append('/home/lauri/code/brPy/')
+from brpylib import NsxFile
+# modules for sys info
+import psutil
+# numpy 
+import numpy as np
 
 
 ###################################
@@ -19,7 +26,7 @@ f = NWBFile('N', 'Anesthetized marmoset recording', 'MM666', datetime.now(),
 # create device object
 device = f.create_device(name='128-ch Cerebus', source="a source")
 
-# create electrode group (for machine readability only)
+# create electrode group
 electrode_name = 'Utah-array'
 source = "Blackrock Microsystems"
 description = "96-channel Utah array"
@@ -30,42 +37,61 @@ electrode_group = f.create_electrode_group(electrode_name,
                                            location=location,
                                            device=device)
 
+
+
+###################################
+
+# Open file and extract headers
+datafile = '/opt3/MM385/P1/20170518-211557/20170518-211557-001.ns5'
+nsx_file = NsxFile(datafile)
+# may cause problems with very large files
+Data     = nsx_file.getdata()
+
+# get data length and sampling rate
+data_length = Data['data_headers'][0]['NumDataPoints']
+sample_rate = Data['samp_per_s']
+channel_num =  nsx_file.basic_header['ChannelCount']
+nsx_file.close()
+
+# set electrode table for the file
+electrode_table = ElectrodeTable('V-Probe_table')
 # add electrode entries
-for idx in [1, 2, 3, 4]:
-    f.add_electrode(idx,
+for idx in np.arange(channel_num):
+    electrode_table.add_row(idx,
                     x=1.0, y=2.0, z=0.0,
                     imp=float(-idx),
-                    location='V1', filtering='none',
+                    location='V1', filtering='0.3-7500Hz',
                     description='channel %s' % idx, group=electrode_group)
 
 
-electrode_table = ElectrodeTable('Utah-array_table')
-electrode_table_region = ElectrodeTableRegion(electrode_table, [0, 2], 'the first and third electrodes')
-###################################
-
+# set electrode table
+f.set_electrode_table(electrode_table)
+# include all electrode at once
+electrode_table_region = ElectrodeTableRegion(electrode_table, list(range(channel_num)), 'the first and third electrodes')
+# write data for all electrodes
 ephys_ts = ElectricalSeries('test_ephys_data',
                             'an hypothetical source',
-                            ephys_data,
+                            Data['data'],
                             electrode_table_region,
-                            timestamps=ephys_timestamps,
-                            # Alternatively, could specify starting_time and rate as follows
-                            # starting_time=ephys_timestamps[0],
-                            # rate=rate,
-                            resolution=0.001,
+                            timestamps=np.arange(data_length)/sample_rate,
+                            resolution=1.0,
                             comments="This data was randomly generated with numpy, using 1234 as the seed",
                             description="Random numbers generated with numpy.random.rand")
 
-
-
-stimulus_ts = TimeSeries('Stimulus timeseries',
-                         'VSG',
-                         stimulus_data,
-                         'degrees',
-                         timestamps=ephys_timestamps,
-                         resolution=0.001,
-                         comments="This data was randomly generated with numpy, using 1234 as the seed",
-                         description="Imagined orientation timeseries")
+# stimulus_ts = TimeSeries('Stimulus timeseries',
+#                          'VSG',
+#                          stimulus_data,
+#                          'degrees',
+#                          timestamps=ephys_timestamps,
+#                          resolution=0.001,
+#                          comments="This data was randomly generated with numpy, using 1234 as the seed",
+#                          description="Imagined orientation timeseries")
                          
+
+filename = 'orientation-data.h5'
 f.add_acquisition(ephys_ts)
-f.add_stimulus(stimulus_ts)
+io = HDF5IO(filename, manager=get_manager(), mode='w')
+io.write(f)
+io.close()
+#f.add_stimulus(stimulus_ts)
 
