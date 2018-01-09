@@ -12,6 +12,8 @@ from brpylib import NsxFile
 import psutil
 # numpy 
 import numpy as np
+# some functions
+import datapreprocesslib as dpl
 
 
 ###################################
@@ -42,7 +44,7 @@ electrode_group = f.create_electrode_group(electrode_name,
 ###################################
 
 # Open file and extract headers
-datafile = '/opt3/MM385/P1/20170518-211557/20170518-211557-001.ns5'
+datafile = '/opt3/MM385/P1/20170518-223225/20170518-223225-001.ns5'
 nsx_file = NsxFile(datafile)
 # may cause problems with very large files
 Data     = nsx_file.getdata()
@@ -69,7 +71,7 @@ f.set_electrode_table(electrode_table)
 # include all electrode at once
 electrode_table_region = ElectrodeTableRegion(electrode_table, list(range(channel_num)), 'the first and third electrodes')
 # write data for all electrodes
-ephys_ts = ElectricalSeries('test_ephys_data',
+ephys_ts = ElectricalSeries('orientation1',
                             'an hypothetical source',
                             Data['data'],
                             electrode_table_region,
@@ -90,6 +92,7 @@ ephys_ts = ElectricalSeries('test_ephys_data',
 
 filename = 'orientation-data.h5'
 f.add_acquisition(ephys_ts)
+f.add_acquisition(ephys_ts1)
 io = HDF5IO(filename, manager=get_manager(), mode='w')
 io.write(f)
 io.close()
