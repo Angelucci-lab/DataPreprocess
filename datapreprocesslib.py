@@ -48,17 +48,18 @@ def modStim4NWB2(stim_value,pulse_samples,NS5_numsamples,on_time_ms=500,off_time
 
     # get rid of block end pulses
     pulse_samples = pulse_samples[::2].copy()
+    print(pulse_samples.shape)
     
     # initialize containers for blank before stimulus
-    stim_off_value = np.nan * np.ones(stim_value.shape[0],int(off_time_ms/1000.0*FSnev))
+    stim_off_value = np.nan * np.ones((stim_value.shape[0],int(off_time_ms/1000.0*FSnev)))
     
     # repeat for each trial
-    for i in stim_on_value.shape[1]:
+    for i in range(stim_value.shape[1]):
         stim_on_value = np.repeat(stim_value[:,i],int(on_time_ms/1000.0*FSnev))
-        stim_on_value = stim_on_value.reshape(stim_on_value.shape[0],int(on_time_ms/1000.0*FSnev))
+        stim_on_value = stim_on_value.reshape(stim_value.shape[0],int(on_time_ms/1000.0*FSnev))
         # catenate the blank period
-        stim_on_value = np.hstack(stim_off_value,stim_on_value)
-        stim_out[pulse_sample:pulse_sample + stim_on_value.flatten().shape[0] +1] = stim_on_value.flatten()
+        stim_on_value = np.hstack((stim_off_value,stim_on_value))
+        stim_out[pulse_samples[i]:pulse_samples[i] + stim_on_value.flatten().shape[0]] = stim_on_value.flatten()
 
     
     return stim_out

@@ -1,20 +1,26 @@
-# modules for NWB
 from pynwb import NWBFile, get_manager
 from datetime import datetime
 from pynwb.form.backends.hdf5 import HDF5IO
-from pynwb.ecephys import ElectricalSeries, TimeSeries
-from pynwb.ecephys import ElectrodeTable, ElectrodeTableRegion
-#  modules for reading Blackrock *.ns files
+from pynwb.ecephys import ElectricalSeries, TimeSeries, ElectrodeTable, ElectrodeTableRegion
+# import psutil
+import scipy.io as scio
+import numpy as np
+import datapreprocesslib as dpl
 import sys
 sys.path.append('/home/lauri/code/brPy/')
 from brpylib import NsxFile
-# modules for sys info
-import psutil
-# numpy 
-import numpy as np
-# some functions
-import datapreprocesslib as dpl
 
+# name of data file
+datafile = '20170518-223225-001.ns5'
+pulsfile = '20170518-223225-001.ns4'
+stimfile = 'stimParamsOR.mat'
+
+# data lives here
+bs_fldr  = '/opt3/MM385/P1/20170518-223225/'
+
+datafile = bs_fldr + datafile
+pulsfile = bs_fldr + pulsfile
+stimfile = bs_fldr + stimfile
 
 ###################################
 # init NWB-file
@@ -39,18 +45,19 @@ electrode_group = f.create_electrode_group(electrode_name,
                                            location=location,
                                            device=device)
 
-
-
 ###################################
 
-# Open file and extract headers
-datafile = '/opt3/MM385/P1/20170518-223225/20170518-223225-001.ns5'
+# open file and extract headers
 nsx_file = NsxFile(datafile)
-# may cause problems with very large files
 Data     = nsx_file.getdata()
 
-# get data length and sampling rate
-data_length = Data['data_headers'][0]['NumDataPoints']
+# get continuous pulse timeseries
+pls_file = NsxFile(pulsfile)
+pls_Data = pls_file.getdata()
+pls_Data = pls_Data['data'][0]
+
+# extract data parameters
+NS5_numsamples = Data['data_headers'][0]['NumDataPoints']
 sample_rate = Data['samp_per_s']
 channel_num =  nsx_file.basic_header['ChannelCount']
 nsx_file.close()
@@ -69,17 +76,24 @@ for idx in np.arange(channel_num):
 # set electrode table
 f.set_electrode_table(electrode_table)
 # include all electrode at once
-electrode_table_region = ElectrodeTableRegion(electrode_table, list(range(channel_num)), 'the first and third electrodes')
+electrode_table_region = ElectrodeTableRegion(electrode_table, list(range(channel_num)), 'All electrodes')
 # write data for all electrodes
 ephys_ts = ElectricalSeries('orientation1',
                             'an hypothetical source',
                             Data['data'],
                             electrode_table_region,
-                            timestamps=np.arange(data_length)/sample_rate,
+                            timestamps=np.arange(NS5_numsamples)/sample_rate,
                             resolution=1.0,
                             comments="This data was randomly generated with numpy, using 1234 as the seed",
                             description="Random numbers generated with numpy.random.rand")
 
+# read in stimulus info 
+stim_mat = scio.loadmat(stimfile)
+stim_mat = dpl.getStimParams(stim_mat)
+# read pulses
+pulse_samples= dpl.PulseCounter(pls_Data,1000)
+
+stimulus_data = dpl.modStim4NWB2(stim_mat['stim_value'],pulse_samples,NS5_numsamples,stim_mat['on_time_ms'],stim_mat['off_time_ms'])
 # stimulus_ts = TimeSeries('Stimulus timeseries',
 #                          'VSG',
 #                          stimulus_data,
@@ -90,9 +104,10 @@ ephys_ts = ElectricalSeries('orientation1',
 #                          description="Imagined orientation timeseries")
                          
 
+
+
 filename = 'orientation-data.h5'
 f.add_acquisition(ephys_ts)
-f.add_acquisition(ephys_ts1)
 io = HDF5IO(filename, manager=get_manager(), mode='w')
 io.write(f)
 io.close()
