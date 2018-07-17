@@ -1,5 +1,55 @@
 import numpy as np
 
+def BinnedRate(spikes,start=100, stop=500, step=10):
+    """
+    Takes in cell x stimulus conditions x trials x bins matrix of spike counts
+    The functions assumes that each bin is 1ms 
+    """
+    inds_list = [np.arange(start + i*step,(start+step) + i*step) for i in range(int(stop / step))]
+    n_bins    = len(inds_list)
+    # init output matrix
+    spikes_out = np.nan*np.ones((spikes.shape[0],spikes.shape[1],spikes.shape[2],n_bins))
+    # loop cells
+    for c in range(spikes_out.shape[0]):
+        for s in range(spikes_out.shape[1]):
+            for t in range(spikes_out.shape[2]):
+                spk_cunts = [np.sum(spikes[c,s,t,i_list]) for i_list in inds_list]
+                spikes_out[c,s,t,:] = np.array(spk_cunts)
+
+    return spikes_out
+    
+def Zscore(spikes):
+    """
+    Zscore(spikes):
+    Input: spikes is units x conditions x trials array of spike-counts
+    Output: units x conditions x trials array of spike-counts, z-scored over trials
+    """
+    spikes_out = np.nan*np.ones(spikes.shape)
+    for u in range(spikes.shape[0]):
+        for c in range(spikes.shape[1]):
+            spikes_out[u,c,:] = (spikes[u,c,:] - np.mean(spikes[u,c,:])) / np.std(spikes[u,c,:])
+    
+    return spikes_out
+    
+def getPSI(spk_counts_binned, start=100, stop=500, step=10):
+    """
+    Takes a vector of population spike counts as input and returns the population synchronization 
+    index PSI. 
+    start:analysis starts from  t=start
+    stop: analysis is run until t=stop
+    step: size of each analysis window
+    """
+    
+    # get population spike-counts in step size bins
+    inds_list = [np.arange(start + i*step,(start+step) + i*step) for i in range(int(stop / step))]
+    spk_cunts = [np.sum(spk_counts_binned[:,i_list]) for i_list in inds_list]
+    # compute PSI
+    spk_cunts = np.array(spk_cunts)
+    PSI = spk_cunts.std() / spk_cunts.mean()
+    
+    return PSI
+
+
 def PulseCounter(pulse_data,thr):
     temp2 = np.where(pulse_data > thr)
     temp2 = temp2[0]

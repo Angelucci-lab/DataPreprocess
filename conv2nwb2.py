@@ -46,9 +46,8 @@ electrode_group = f.create_electrode_group(electrode_name,
                                            device=device)
 
 ###################################
-
 # open file and extract headers
-nsx_file = NsxFile(datafile)
+nsx_file = NsxFile(bs_fldr + datafile)
 Data     = nsx_file.getdata()
 
 # get continuous pulse timeseries
