@@ -1,9 +1,15 @@
 import numpy as np
 import tables as tb
+import pandas as pd
 
-animal = ('MM385','MM385','MM390')
-penetr = ('P1','P2','P6')
-fldrs  = ('20170519-033903','20170519-130912','20180207-230434')
+# information about penetration is stored in a csv file
+notes_dir = '/home/lauri/projects/CorrelatedVariability/notes/'
+notes_fle = 'penetrationinfo.csv'
+df = pd.read_csv(notes_dir+notes_fle)
+
+animal = df['ANIMAL'].values
+penetr = df['PENETRATION'].values
+fldrs  = df['FOLDER'].values
 
 results_root = '/home/lauri/projects/CorrelatedVariability/results/'
 file_name    = results_root+'collated_correlation_data.h5'
@@ -28,10 +34,9 @@ for p, val in enumerate(animal):
     spkDur   = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_spikeWidths.npy')
     # gather stimulus info
     diams              = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'diams.npy')
-    contrast           = np.load(
-    orientation        = np.load(
-    spatial_frequency  = np.load(
-    temporal_frequency = np.load(
+    contrast           = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'contrast.npy')
+    spatial_frequency  = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'TF.npy')
+    temporal_frequency = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'SF.npy')
     
     
     # prepare table
@@ -48,10 +53,13 @@ for p, val in enumerate(animal):
                  'depth':tb.Float64Col(1),
                  'layer':tb.StringCol(3),
                  'spkDur':tb.Float64Col(1),
-                 'diams':tb.Float64Col(shape=(diams.shape[1]))}
-
+                 'diams':tb.Float64Col(shape=(diams.shape[1])),
+                 'contrast':tb.Float64Col(shape=(contrast.shape[1])),
+                 'spatial_frequency':tb.Float64Col(shape=(spatial_frequency.shape[1])),
+                 'temporal_frequency':tb.Float64Col(shape=(temporal_frequency.shape[1]))}
+    
     # create data table
-    table = data_file.create_table(data_group, animal[p]+penetr[p], dataTable, 'Preprocessed spike-sorted data')
+    table = data_file.create_table(data_group, animal[p]+penetr[p]+fldrs[p].replace('-','_'), dataTable, 'Preprocessed spike-sorted data')
 
     # write unit data to table
     unit = table.row
@@ -66,7 +74,10 @@ for p, val in enumerate(animal):
         unit['SNR']      = SNR[u]
         unit['depth']    = depth[u]
         unit['spkDur']   = spkDur[u]
-        unit['diams']   = diams[0,:]
+        unit['diams']    = diams[0,:]
+        unit['contrast'] = contrast[0,:]
+        unit['spatial_frequency']  = spatial_frequency[0,:]
+        unit['temporal_frequency'] = temporal_frequency[0,:]
         # append row
         unit.append()
 
