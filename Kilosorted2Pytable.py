@@ -7,6 +7,14 @@ notes_dir = '/home/lauri/projects/CorrelatedVariability/notes/'
 notes_fle = 'penetrationinfo.csv'
 df = pd.read_csv(notes_dir+notes_fle)
 
+# we want to drop bad runs, as judged qualitatively, using voodoo you know
+df = df[df.QUALITY != 'bad']
+# and runs with visible drift
+df = df[df.OTHER != 'drift']
+
+# to combine runs that were stored in  separate folders
+sepa_runs = np.array([['MM390','MM390','MM390','MM390'],['P7','P8','P9','P9'],['100','50','50','100']])
+
 animal = df['ANIMAL'].values
 penetr = df['PENETRATION'].values
 fldrs  = df['FOLDER'].values
@@ -20,23 +28,73 @@ data_file  = tb.open_file(file_name,'a')
 data_group = data_file.create_group('/','data_group',"Data tables for each penetration") 
 
 # loop through penetrations and animals
-for p, val in enumerate(animal):
-    # load processed Kilosort outputs
-    spkC_L   = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_spkCnts_L.npy')
-    spkC_NoL = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_spkCnts_NoL.npy')
-    baseLine = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_baseLine.npy')
-    spkR_L   = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_spkraster_L.npy')
-    spkR_NoL = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_spkraster_NoL.npy')
-    RF_L     = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_fieldParams_L.npy')
-    RF_NoL   = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_fieldParams_NoL.npy')
-    SNR      = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_SNR.npy')
-    depth    = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_spikeDepths.npy')
-    spkDur   = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'Kilosorted_spikeWidths.npy')
-    # gather stimulus info
-    diams              = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'diams.npy')
-    contrast           = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'contrast.npy')
-    spatial_frequency  = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'TF.npy')
-    temporal_frequency = np.load('/opt3/'+animal[p]+'/'+penetr[p]+'/'+fldrs[p]+'/'+'SF.npy')
+# we need dummy variable for skipping folders that are read in the loop
+a = -1
+while a < animal.shape[0]-1:
+    a += 1
+    cluster_group = pd.read_csv('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'cluster_groups.csv',sep='\t')
+    cluster_id = cluster_group['cluster_id'].values
+    # some runs were separated to different folders (separuns = yes)
+    if df.SEPARUNS.values[a] == 'yes':
+        
+        # which unit numbers correspond across folders is stored in a dictionary file
+        with open('/home/lauri/projects/CorrelatedVariability/notes/unit_corresp_'+df.ANIMAL.values[a]+df.PENETRATION.values[a]+'_c'+str(df.CONTRAST.values[a])+'.py') as corresp_dict_file:
+            corresp_dict = eval(corresp_dict_file.read())
+
+        # 
+        unit_numbers = [corresp_dict[i] for i in corresp_dict]
+        unit_numbers = np.array(unit_numbers)
+        
+        for i in range(unit_numbers.shape[1]):
+            #
+            if i == 0:
+                # no need to load cluster id here as it was done before entering the if clause
+                corresp_indx = [np.where(cluster_id == unit_numbers[j,i])[0][0] for j in range(unit_numbers[:,i].shape[0])]
+                spkC_L   = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkCnts_L.npy')[corresp_indx,:,:]
+                spkC_NoL = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkCnts_NoL.npy')[corresp_indx,:,:]
+                baseLine = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_baseLine.npy')[corresp_indx,:]
+                spkR_L   = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkraster_L.npy')[corresp_indx,:,:,:]
+                spkR_NoL = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkraster_NoL.npy')[corresp_indx,:,:,:]
+            else:
+                a +=1
+                #  cluster id needs to be updated for the new unit assignment
+                cluster_group = pd.read_csv('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'cluster_groups.csv',sep='\t')
+                cluster_id = cluster_group['cluster_id'].values
+                corresp_indx = [np.where(cluster_id == unit_numbers[j,i])[0][0] for j in range(unit_numbers[:,i].shape[0])]
+                    
+                spkC_L   = np.append(spkC_L,   np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkCnts_L.npy')[corresp_indx,:,:],axis=2)
+                spkC_NoL = np.append(spkC_NoL, np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkCnts_NoL.npy')[corresp_indx,:,:],axis=2)
+                baseLine = np.append(baseLine, np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_baseLine.npy')[corresp_indx,:],axis=1)
+                spkR_L   = np.append(spkR_L,   np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkraster_L.npy')[corresp_indx,:,:,:], axis=2)
+                spkR_NoL = np.append(spkR_NoL, np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkraster_NoL.npy')[corresp_indx,:,:,:], axis=2)
+                RF_L     = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_fieldParams_L.npy')
+                RF_NoL   = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_fieldParams_NoL.npy')
+                SNR      = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_SNR.npy')
+                depth    = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spikeDepths.npy')
+                spkDur   = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spikeWidths.npy')
+                # gather stimulus info
+                diams              = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'diams.npy')
+                contrast           = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'contrast.npy')
+                spatial_frequency  = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'TF.npy')
+                temporal_frequency = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'SF.npy')
+                
+    else:
+        # this part in a loop if condition met, that's it
+        spkC_L   = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkCnts_L.npy')
+        spkC_NoL = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkCnts_NoL.npy')
+        baseLine = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_baseLine.npy')
+        spkR_L   = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkraster_L.npy')
+        spkR_NoL = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spkraster_NoL.npy')
+        RF_L     = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_fieldParams_L.npy')
+        RF_NoL   = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_fieldParams_NoL.npy')
+        SNR      = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_SNR.npy')
+        depth    = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spikeDepths.npy')
+        spkDur   = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'Kilosorted_spikeWidths.npy')
+        # gather stimulus info
+        diams              = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'diams.npy')
+        contrast           = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'contrast.npy')
+        spatial_frequency  = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'TF.npy')
+        temporal_frequency = np.load('/opt3/'+df.ANIMAL.values[a]+'/'+df.PENETRATION.values[a]+'/'+df.FOLDER.values[a]+'/'+'SF.npy')
     
     
     # prepare table
@@ -59,7 +117,8 @@ for p, val in enumerate(animal):
                  'temporal_frequency':tb.Float64Col(shape=(temporal_frequency.shape[1]))}
     
     # create data table
-    table = data_file.create_table(data_group, animal[p]+penetr[p]+fldrs[p].replace('-','_'), dataTable, 'Preprocessed spike-sorted data')
+    # replace fldrs with contrast
+    table = data_file.create_table(data_group, df.ANIMAL.values[a]+df.PENETRATION.values[a]+str(df.CONTRAST.values[a]), dataTable, 'Preprocessed spike-sorted data')
 
     # write unit data to table
     unit = table.row
